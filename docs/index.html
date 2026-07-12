@@ -161,7 +161,7 @@ body{font-family:'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;backgroun
 .leaflet-tile-pane{z-index:1}
 .mc .leaflet-control-zoom{position:absolute;bottom:50px;right:9px}
 </style>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
 </head>
 <body>
 
@@ -318,7 +318,7 @@ body{font-family:'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;backgroun
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -783,11 +783,8 @@ function initMap(lat,lng){
   document.getElementById('mname').textContent=cCity;
 }
 
-var WTILE={
-  cloud:{url:'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png'},
-  temp:{url:'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png'},
-};
-
+// 天气叠加层已移除（OpenWeatherMap tile 需 API key，免费额度不足）
+// 保留高德标准图、ArcGIS卫星图、CartoDB暗色图三种底图
 function swL(btn,type){
   var i,all=document.querySelectorAll('.mb');
   for(i=0;i<all.length;i++)all[i].classList.remove('on');
@@ -796,10 +793,6 @@ function swL(btn,type){
   if(type==='sat'&&oSat){oMap.removeLayer(oBaseActive);oSat.addTo(oMap);oBaseActive=oSat}
   else if(type==='dark'&&oDark){oMap.removeLayer(oBaseActive);oDark.addTo(oMap);oBaseActive=oDark}
   else if(type==='std'&&oStreet){oMap.removeLayer(oBaseActive);oStreet.addTo(oMap);oBaseActive=oStreet}
-  else if(WTILE[type]&&oMap){
-    oWTile=L.tileLayer(WTILE[type].url,{opacity:.55,maxZoom:18});
-    oWTile.addTo(oMap);
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -886,7 +879,7 @@ function loadAll(cityId,lat,lng,tz,name){
       var info=d.weatherinfo;
       if(info){
         document.getElementById('tg').textContent=info.temp;
-        document.getElementById('ds').textContent=info.WD+info.WS;
+        // 注：天气描述(#ds)由 Open-Meteo WMO 码提供，WD+WS 是风不是天气
         document.getElementById('hum').textContent=info.SD;
         document.getElementById('ws').textContent=info.WSE+'级';
         document.getElementById('pr').textContent=info.rain+'mm';
@@ -969,10 +962,10 @@ function loadAll(cityId,lat,lng,tz,name){
       // 云量
       document.getElementById('d5').textContent=w.current.cloud_cover+'%';
 
-      // 天气描述（WMO code 兜底）
-      if(w.current.weather_code!==undefined){
+      // 天气描述：优先用 WMO 码（Open-Meteo），weather.com.cn 的 WD+WS 是风向风速不是天气描述
+      if(w.current.weather_code!=null){
         var wmo=wi(w.current.weather_code);
-        document.getElementById('ds').textContent=wmo.zh||'—';
+        if(wmo.zh&&wmo.zh!=='未知')document.getElementById('ds').textContent=wmo.zh;
       }
 
       // 能见度（OM兜底）
@@ -1098,11 +1091,23 @@ function renderPrecip(d){
 
 function renderAqi(d){
   var c=d.current;if(!c)return;
-  var aqi=c.european_aqi||0,info=aqiInfo(aqi);
-  var iv=document.getElementById('aqiv');
-  iv.textContent=aqi;iv.style.color=info.color;
-  var lb=document.getElementById('aqil');
-  lb.textContent=info.label;lb.style.color=info.color;
+  var aqiVal=c.european_aqi;
+  var hasAqi=aqiVal!=null&&aqiVal!==''&&aqiVal>=0;
+  if(!hasAqi){
+    document.getElementById('aqiv').textContent='—';
+    document.getElementById('aqil').textContent='暂无数据';
+    document.getElementById('aqil').style.color='#556688';
+    document.getElementById('aqis').textContent='空气质量暂无数据';
+    document.getElementById('aqiv').style.color='#556688';
+    document.getElementById('pm25').textContent='—';
+    document.getElementById('pm10').textContent='—';
+    document.getElementById('no2').textContent='—';
+    document.getElementById('o3').textContent='—';
+    return;
+  }
+  var info=aqiInfo(aqiVal);
+  document.getElementById('aqiv').textContent=aqiVal;document.getElementById('aqiv').style.color=info.color;
+  document.getElementById('aqil').textContent=info.label;document.getElementById('aqil').style.color=info.color;
   document.getElementById('aqis').textContent='空气质量'+info.label;
   document.getElementById('pm25').textContent=c.pm2_5?c.pm2_5.toFixed(1):'—';
   document.getElementById('pm10').textContent=c.pm10?c.pm10.toFixed(1):'—';
