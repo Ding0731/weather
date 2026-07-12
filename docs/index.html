@@ -154,7 +154,14 @@ body{font-family:'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;backgroun
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
 @media(max-width:900px){.mn{grid-template-columns:1fr;padding:12px 14px}.dg{grid-template-columns:repeat(2,1fr)}.hd{padding:12px 14px}}
+/* Leaflet dark fix */
+.leaflet-container{background:#0a0f2a!important;font-family:inherit}
+.leaflet-control-zoom a{background:rgba(10,15,35,.9)!important;color:var(--tx)!important;border-color:var(--bd)!important}
+.leaflet-control-zoom{margin:0!important}
+.leaflet-tile-pane{z-index:1}
+.mc .leaflet-control-zoom{position:absolute;bottom:50px;right:9px}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 
@@ -308,12 +315,10 @@ body{font-family:'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;backgroun
   </div>
 </div>
 
-<!-- Tencent Map security -->
-<script>window._TMapSecurityConfig={serviceHost:'https://lbsportal.map.qq.com/aizone/qclaw/v1/tmapService'};</script>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<!-- Tencent Map GL -->
-<script src="https://map.qq.com/api/gljs?v=1&libraries=visualization"></script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -753,29 +758,31 @@ function setLoading(v,m){
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Tencent Map
+//  Leaflet Map
 // ═══════════════════════════════════════════════════════════════
+var oStreet,oSat,oDark,oBaseActive;
+
 function initMap(lat,lng){
   if(!oMap){
-    oMap=new TMap.Map(document.getElementById('map'),{
-      zoom:10,center:new TMap.LatLng(lat,lng),mapStyleId:'style1',
+    oMap=L.map(document.getElementById('map'),{
+      center:[lat,lng],zoom:10,zoomControl:false,attributionControl:false,
     });
+    oStreet=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19});
+    oSat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
+    oDark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19});
+    oStreet.addTo(oMap);
+    oBaseActive=oStreet;
+    oMap.addControl(L.control.zoom({position:'bottomright'}));
   }else{
-    oMap.setCenter(new TMap.LatLng(lat,lng));
-    oMap.setZoom(10);
+    oMap.setView([lat,lng],10);
   }
-  if(oMkr)oMkr.setMap(null);
-  oMkr=new TMap.MultiMarker({
-    map:oMap,
-    styles:{
-      m0:new TMap.MarkerStyle({width:28,height:38,anchor:{x:14,y:38},color:'#4fc3f7',strokeColor:'#fff',strokeWidth:2})
-    },
-    geometries:[{id:'here',styleId:'m0',position:new TMap.LatLng(lat,lng)}]
-  });
+  if(oMkr)oMap.removeLayer(oMkr);
+  oMkr=L.circleMarker([lat,lng],{
+    radius:10,color:'#4fc3f7',fillColor:'#4fc3f7',fillOpacity:.6,weight:2
+  }).addTo(oMap);
   document.getElementById('mname').textContent=cCity;
 }
 
-var MAP_STYLES={std:{id:'style1'},sat:{id:'style3'},dark:{id:'style2'}};
 var WTILE={
   cloud:{url:'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png'},
   temp:{url:'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png'},
@@ -785,18 +792,13 @@ function swL(btn,type){
   var i,all=document.querySelectorAll('.mb');
   for(i=0;i<all.length;i++)all[i].classList.remove('on');
   btn.classList.add('on');
-  if(oWTile){oWTile.setMap(null);oWTile=null}
-  if(MAP_STYLES[type]){
-    if(oMap)oMap.setMapStyleId(MAP_STYLES[type].id);
-  }else if(WTILE[type]){
-    if(oMap){
-      var wurl=WTILE[type].url;
-      oWTile=new TMap.ImageTileLayer({
-        getTileUrl:function(x,y,z){return wurl.replace('{z}',z).replace('{x}',x).replace('{y}',y);},
-        tileSize:256,opacity:.55,
-      });
-      oWTile.setMap(oMap);
-    }
+  if(oWTile){oMap.removeLayer(oWTile);oWTile=null}
+  if(type==='sat'&&oSat){oMap.removeLayer(oBaseActive);oSat.addTo(oMap);oBaseActive=oSat}
+  else if(type==='dark'&&oDark){oMap.removeLayer(oBaseActive);oDark.addTo(oMap);oBaseActive=oDark}
+  else if(type==='std'&&oStreet){oMap.removeLayer(oBaseActive);oStreet.addTo(oMap);oBaseActive=oStreet}
+  else if(WTILE[type]&&oMap){
+    oWTile=L.tileLayer(WTILE[type].url,{opacity:.55,maxZoom:18});
+    oWTile.addTo(oMap);
   }
 }
 
@@ -819,8 +821,11 @@ si.addEventListener('keydown',function(e){
   if(e.key==='ArrowDown'){sHl=Math.min(sHl+1,its.length-1);upHl();e.preventDefault()}
   else if(e.key==='ArrowUp'){sHl=Math.max(sHl-1,-1);upHl();e.preventDefault()}
   else if(e.key==='Enter'){
-    if(sHl>=0&&its[sHl])its[sHl].click();
     sugEl.classList.add('hidden');
+    if(sHl>=0&&its[sHl]){its[sHl].click();return}
+    // 无高亮候选 → 自动选第一个
+    var first=sugEl.querySelector('.sug-it');
+    if(first)first.click();
   }else if(e.key==='Escape'){sugEl.classList.add('hidden')}
 });
 
@@ -963,6 +968,17 @@ function loadAll(cityId,lat,lng,tz,name){
       }
       // 云量
       document.getElementById('d5').textContent=w.current.cloud_cover+'%';
+
+      // 更新显示时间 — 用 Open-Meteo 时间戳算相对时间
+      if(w.current.time){
+        var dt=new Date(w.current.time);
+        var ufEl=document.getElementById('uf');
+        ufEl.textContent=dt.toLocaleString('zh-CN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+        document.getElementById('ut').textContent=relTime(dt);
+      }else if(!document.getElementById('uf').textContent||document.getElementById('uf').textContent==='—'){
+        document.getElementById('uf').textContent=new Date().toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+        document.getElementById('ut').textContent='刚刚更新';
+      }
 
       oDaily=w.daily;
       renderForecast(w.daily);
@@ -1130,19 +1146,31 @@ function drawChart(){
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  相对时间
+// ═══════════════════════════════════════════════════════════════
+function relTime(d){
+  var diff=Math.floor((Date.now()-d.getTime())/1000);
+  if(diff<0)diff=0;
+  if(diff<60)return'刚刚更新';
+  if(diff<3600)return Math.floor(diff/60)+'分钟前更新';
+  if(diff<86400)return Math.floor(diff/3600)+'小时前更新';
+  return Math.floor(diff/86400)+'天前更新';
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  Boot
 // ═══════════════════════════════════════════════════════════════
 var bootTimer=0;
 function waitAndBoot(){
   bootTimer++;
-  if(typeof TMap!=='undefined'&&typeof Chart!=='undefined'){
+  if(typeof L!=='undefined'&&typeof Chart!=='undefined'){
     setLoading(true,'正在加载天气数据…');
     loadAll('101010100',39.904,116.391,'Asia/Shanghai','北京');
-  }else if(bootTimer<100){
-    setTimeout(waitAndBoot,100);
+  }else if(bootTimer<400){
+    setTimeout(waitAndBoot,250);
   }else{
     setLoading(false);
-    showError('地图加载失败，请检查网络连接');
+    showError('地图或图表库加载失败，请检查网络连接');
   }
 }
 waitAndBoot();
